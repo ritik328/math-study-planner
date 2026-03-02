@@ -123,6 +123,7 @@
       <button class="btn" onclick="restoreData()">Restore Data ↑</button>
       <button class="btn" onclick="openKbd()">Shortcuts ?</button>
       <button class="btn btn-g" onclick="openChat()">🤖 AI Tutor</button>
+      <button class="btn btn-r" style="font-weight:600;" onclick="aiPanicMode()">🚨 Panic Mode</button>
       <button class="btn" id="dmBtn" onclick="toggleDarkMode()">🌒 Dark Mode</button>
       <button class="btn btn-r" onclick="resetAll()">Reset</button>
     </div>
@@ -144,6 +145,8 @@
   <div class="toast" id="toast">
     <div class="tdot" id="tdot"></div><span id="tmsg">Done</span>
   </div>
+
+  <input type="file" id="globalSnapInput" accept="image/*" style="display:none;" onchange="handleSnapUpload(event)">
 
   <!-- AI CHAT PANEL -->
   <div class="kpanel" id="chatPanel" onclick="closeChatEvt(event)">

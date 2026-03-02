@@ -250,7 +250,7 @@ function render() {
         row.className = 'srow'; row.id = 'r' + k; row.setAttribute('data-s', item.toLowerCase());
         const isFml = /[=|∑→⟹÷×]/.test(item); const dv = diff[k] || '';
         const dls = ['', 'easy', 'med', 'hard'];
-        row.innerHTML = `<button class="ai-btn" onclick="aiExplain('${item.replace(/'/g, "\\'")}', event)" title="Explain like I'm 5">🧠</button><div class="sck" id="cb${k}"></div><div class="stxt">${item}</div>${isFml ? '<div class="ftag">formula</div>' : ''}<div class="dtag" data-d="${dv}" id="dt${k}" onclick="cycD(event,'${k}')" title="Set difficulty">${dv || '·'}</div>`;
+        row.innerHTML = `<button class="ai-btn" onclick="aiSnapClick('${item.replace(/'/g, "\\'")}', event)" title="Snap to Solve">📸</button><button class="ai-btn" onclick="aiExplain('${item.replace(/'/g, "\\'")}', event)" title="Explain like I'm 5">🧠</button><div class="sck" id="cb${k}"></div><div class="stxt">${item}</div>${isFml ? '<div class="ftag">formula</div>' : ''}<div class="dtag" data-d="${dv}" id="dt${k}" onclick="cycD(event,'${k}')" title="Set difficulty">${dv || '·'}</div>`;
         row.onclick = e => { if (e.target.classList.contains('dtag') || e.target.classList.contains('ai-btn')) return; togDone(k, row); };
         inner.appendChild(row);
       });
@@ -517,6 +517,36 @@ OUTPUT FORMAT (Use Markdown):
 * (Add a brief 1-sentence encouraging note on how well they grasped the topic based on their brain-dump)
 `;
 
+// 5. The "Panic Mode" Study Scheduler
+const getPanicModePrompt = (daysLeft, hoursPerDay, uncheckedTopicsList) => `
+The student has an exam in ${daysLeft} days and can study for ${hoursPerDay} hours per day.
+They still need to learn the following topics: ${uncheckedTopicsList.join(', ')}.
+Create a realistic, hour-by-hour study schedule.
+
+OUTPUT FORMAT (Use Markdown):
+🚨 **PANIC MODE: ENGAGED** 🚨
+
+### 📅 Your Custom Study Plan
+(Create a markdown table breaking down Day 1, Day 2, etc., mapping specific hours to specific topics)
+
+### 🍅 Pomodoro Strategy
+(Briefly explain how they should divide their ${hoursPerDay} hours using 25/5 focus blocks)
+
+### 💡 Pro-Tip for these Topics
+(Give one specific study tip regarding the hardest topic on their list)
+`;
+
+// 6. Snap-to-Solve (Multimodal Vision Prompt)
+const getSnapToSolvePrompt = (subtopicTitle) => `
+Look at the provided image of a math problem related to "${subtopicTitle}".
+DO NOT give the final answer. 
+
+OUTPUT FORMAT (Use Markdown):
+🔍 **What I see:** (Briefly state what the problem is and what you see the student doing)
+⚠️ **The Block:** (Identify exactly where they are stuck or if they made a math error in step X)
+💡 **Your Next Step:** (Provide the specific mathematical rule they need to apply to continue solving it themselves)
+`;
+
 async function aiExplain(item, btnEvent) {
   if (btnEvent) { btnEvent.preventDefault(); btnEvent.stopPropagation(); }
   const t = T.find(x => x.sec.some(s => s.it.includes(item))) || { title: "Mathematics", id: null };
@@ -544,7 +574,7 @@ async function aiQuiz(tId) {
   const t = T.find(x => x.id === tId);
   openChat();
   const subtopics = t.sec.map(s => s.n);
-  const displayTxt = `Give me a pop quiz on ${t.title}`;
+  const displayTxt = `Give me a pop quiz on ${t.title} `;
   document.getElementById('chatInput').value = displayTxt;
   document.getElementById('chatInput').setAttribute('data-hidden-prompt', getActiveRecallQuizPrompt(t.title, subtopics));
   sendToGemini();
@@ -564,6 +594,91 @@ async function aiEnhanceNotes(tId) {
   } else {
     ntxt.value = rawNote; // revert
   }
+}
+
+async function aiPanicMode() {
+  const days = prompt("🚨 PANIC MODE 🚨\nHow many days until your exam?");
+  if (!days || isNaN(days)) return;
+  const hours = prompt("How many hours can you study per day?");
+  if (!hours || isNaN(hours)) return;
+
+  const uncheckedList = T.flatMap(t => {
+    const ks = topK(t.id);
+    const unch = ks.filter(k => !done[k]);
+    if (unch.length > 0) return t.title;
+    return [];
+  });
+
+  const deduped = [...new Set(uncheckedList)];
+  if (deduped.length === 0) {
+    alert("You have no unchecked topics! You are already prepared.");
+    return;
+  }
+
+  openChat();
+  const displayTxt = `Help me schedule my study! 🚨`;
+  document.getElementById('chatInput').value = displayTxt;
+  document.getElementById('chatInput').setAttribute('data-hidden-prompt', getPanicModePrompt(days, hours, deduped));
+  sendToGemini();
+}
+
+let currentSnapSubtopic = "";
+async function aiSnapClick(item, event) {
+  if (event) { event.preventDefault(); event.stopPropagation(); }
+  currentSnapSubtopic = item;
+  document.getElementById('globalSnapInput').click();
+}
+
+async function handleSnapUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onloadend = async () => {
+    const base64data = reader.result.split(',')[1];
+
+    openChat();
+    appendMsg(`📸 Uploaded Image for: ${currentSnapSubtopic} `, 'user');
+    const btn = document.getElementById('chatSendBtn');
+    btn.textContent = '...'; btn.disabled = true;
+
+    const promptText = getSnapToSolvePrompt(currentSnapSubtopic);
+
+    const imagePart = {
+      inlineData: {
+        data: base64data,
+        mimeType: file.type
+      }
+    };
+
+    chatHistory.push({ role: "user", parts: [{ text: promptText }, imagePart] });
+
+    const sysPrompt = "You are Math Jarvis, an AI tutor integrated exclusively into a Mathematics Study Planner tool for the Foundation Level Semester 1 Data Science students. Explain concepts very clearly, structurally, and keep it concise. If you write formulas, format them legibly in plain text.";
+
+    try {
+      const res = await fetch(`/ api / gemini`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: sysPrompt }] },
+          contents: chatHistory
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error?.message || data.error || "API Error");
+
+      let aiText = data.candidates?.[0]?.content?.parts?.[0]?.text || "I couldn't generate a response.";
+      chatHistory.push({ role: "model", parts: [{ text: aiText }] });
+      appendMsg(aiText, 'ai');
+    } catch (err) {
+      appendMsg("Error: " + err.message, 'err');
+      chatHistory.pop();
+    } finally {
+      btn.textContent = 'Send'; btn.disabled = false;
+    }
+    document.getElementById('globalSnapInput').value = ""; // reset
+  };
+  reader.readAsDataURL(file);
 }
 
 document.addEventListener('keydown', e => {
@@ -595,7 +710,7 @@ function toast(msg, type = 'g') {
 const cfc = ['#2a4d10', '#5e8f30', '#9a7208', '#b33024', '#4a8c6e'];
 function spwn(el) { const r = el.getBoundingClientRect(); for (let i = 0; i < 7; i++)mkc(r.left + Math.random() * 36, r.top + window.scrollY + 8); }
 function burst() { for (let i = 0; i < 22; i++)mkc(window.innerWidth / 2 + (Math.random() * 140 - 70), window.scrollY + 180); }
-function mkc(x, y) { const p = document.createElement('div'); p.className = 'cf'; p.style.cssText = `left:${x}px;top:${y}px;width:${3 + Math.random() * 5}px;height:${3 + Math.random() * 5}px;background:${cfc[Math.floor(Math.random() * cfc.length)]};animation-delay:${Math.random() * .2}s;animation-duration:${.9 + Math.random() * .5}s;`; document.body.appendChild(p); setTimeout(() => p.remove(), 1700); }
+function mkc(x, y) { const p = document.createElement('div'); p.className = 'cf'; p.style.cssText = `left:${x} px; top:${y} px; width:${3 + Math.random() * 5} px; height:${3 + Math.random() * 5} px; background:${cfc[Math.floor(Math.random() * cfc.length)]}; animation - delay:${Math.random() * .2} s; animation - duration:${.9 + Math.random() * .5} s; `; document.body.appendChild(p); setTimeout(() => p.remove(), 1700); }
 
 // ── INIT ──────────────────────────────────────
 function updateCountdown() {
