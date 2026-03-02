@@ -381,13 +381,18 @@ async function sendToGemini() {
   const inp = document.getElementById('chatInput');
   const text = inp.value.trim();
   if (!text) return;
+  const hiddenPrompt = inp.getAttribute('data-hidden-prompt');
   inp.value = '';
+  inp.removeAttribute('data-hidden-prompt');
 
   appendMsg(text, 'user');
   const btn = document.getElementById('chatSendBtn');
   btn.textContent = '...'; btn.disabled = true;
 
-  chatHistory.push({ role: "user", parts: [{ text }] });
+  // Send the heavy detailed prompt to Gemini, but only show the concise text in the UI
+  const msgToSend = hiddenPrompt ? hiddenPrompt : text;
+  chatHistory.push({ role: "user", parts: [{ text: msgToSend }] });
+
   const sysPrompt = "You are Math Jarvis, an AI tutor integrated exclusively into a Mathematics Study Planner tool for the Foundation Level Semester 1 Data Science students. Explain concepts very clearly, structurally, and keep it concise. If you write formulas, format them legibly in plain text.";
 
   try {
@@ -434,24 +439,114 @@ async function callGeminiDirectly(promptStr) {
   }
 }
 
+// ==========================================
+// GEMINI API PROMPT TEMPLATES
+// ==========================================
+
+// 1. The "Explain Like I'm 5" Button
+const getELI5Prompt = (topicTitle, subtopicTitle, userNotes) => `
+You are a friendly, enthusiastic math tutor. 
+Explain the mathematical concept of "${subtopicTitle}" (from the topic "${topicTitle}") in the simplest way possible, as if you are explaining it to a beginner. 
+If the user has notes, reference them to correct any misunderstandings or build on their thoughts.
+User's current notes: "${userNotes || 'No notes provided.'}"
+
+OUTPUT FORMAT (Use Markdown):
+🌟 **The Analogy:** Provide a fun, real-world analogy to explain the concept.
+🧠 **The Math Translation:** Explain how the analogy connects to the actual math rules.
+📝 **Quick Example:** Provide one extremely simple, worked-out example.
+`;
+
+// 2. Infinite Practice Problem Generator
+const getPracticeProblemPrompt = (subtopicTitle) => `
+Generate a unique, challenging math word problem based on the concept of "${subtopicTitle}".
+
+OUTPUT FORMAT:
+Return the response ONLY as a valid JSON object with the following structure. Do not include markdown formatting like \`\`\`json.
+{
+  "problem": "The text of the word problem. Make it engaging.",
+  "options": ["Option A", "Option B", "Option C", "Option D"],
+  "correctAnswerIndex": 0,
+  "explanation": {
+    "conceptTested": "A brief 1-sentence explanation of what math rule is needed here.",
+    "stepByStepSolution": [
+      "Step 1: Identify the knowns...",
+      "Step 2: Apply the formula...",
+      "Step 3: Solve for X..."
+    ]
+  }
+}
+`;
+
+// 3. Smart "Active Recall" Quizzes
+const getActiveRecallQuizPrompt = (topicTitle, subtopicList) => `
+Create a 5-question multiple-choice pop quiz for the mathematics topic: "${topicTitle}".
+The questions should cover these specific subtopics: ${subtopicList.join(', ')}.
+
+OUTPUT FORMAT:
+Return the response ONLY as a valid JSON array of objects with this structure. No markdown blocks.
+[
+  {
+    "question": "The question text",
+    "options": ["A", "B", "C", "D"],
+    "correctAnswerIndex": 2,
+    "hint": "A short hint if they get stuck (do not give away the answer)",
+    "detailedExplanation": "A 2-sentence explanation of WHY this is the correct answer, to be shown after they guess."
+  }
+]
+`;
+
+// 4. AI Note Formatting & Enhancement
+const getEnhanceNotesPrompt = (messyNotes) => `
+You are a meticulous mathematics teaching assistant. 
+Take the following messy, stream-of-consciousness notes from a student and format them beautifully.
+Do NOT add outside information that the student didn't mention, just clean up their thoughts.
+
+Student's messy notes:
+"${messyNotes}"
+
+OUTPUT FORMAT (Use Markdown):
+# 📝 Cleaned Notes
+
+## 🎯 Core Concepts
+* (Extract and bullet-point the main ideas here, bolding key terms)
+
+## 🧮 Key Formulas / Rules
+* (Format any math formulas neatly using standard notation)
+
+## 💡 Note to Student
+* (Add a brief 1-sentence encouraging note on how well they grasped the topic based on their brain-dump)
+`;
+
 async function aiExplain(item, btnEvent) {
   if (btnEvent) { btnEvent.preventDefault(); btnEvent.stopPropagation(); }
+  const t = T.find(x => x.sec.some(s => s.it.includes(item))) || { title: "Mathematics", id: null };
+  const userN = t.id ? notes[t.id] : "";
   openChat();
-  document.getElementById('chatInput').value = `Explain this concept to me simply: ${item}`;
+
+  // Create a hidden prompt system so the user doesn't see a giant wall of text in the UI
+  const displayTxt = `Explain "${item}" simply`;
+  document.getElementById('chatInput').value = displayTxt;
+  const pTag = document.getElementById('chatInput');
+  pTag.setAttribute('data-hidden-prompt', getELI5Prompt(t.title, item, userN));
   sendToGemini();
 }
 
 async function aiPractice(tId) {
   const t = T.find(x => x.id === tId);
   openChat();
-  document.getElementById('chatInput').value = `Give me a unique multiple-choice practice word problem for the topic: ${t.title}. Include the options A,B,C,D but DON'T reveal the answer immediately. Wait for me to guess.`;
+  const displayTxt = `Give me a practice problem for ${t.title}`;
+  document.getElementById('chatInput').value = displayTxt;
+  document.getElementById('chatInput').setAttribute('data-hidden-prompt', getPracticeProblemPrompt(t.title));
   sendToGemini();
 }
 
 async function aiQuiz(tId) {
   const t = T.find(x => x.id === tId);
   openChat();
-  document.getElementById('chatInput').value = `Give me a quick 5-question pop quiz on the topic: ${t.title} to test my active recall.`;
+  const subtopics = t.sec.map(s => s.n);
+  const displayTxt = `Give me a pop quiz on ${t.title}`;
+  document.getElementById('chatInput').value = displayTxt;
+  document.getElementById('chatInput').setAttribute('data-hidden-prompt', getActiveRecallQuizPrompt(t.title, subtopics));
   sendToGemini();
 }
 
@@ -460,7 +555,7 @@ async function aiEnhanceNotes(tId) {
   const rawNote = ntxt.value.trim();
   if (!rawNote) { alert("Please write some notes first to enhance!"); return; }
   ntxt.value = "✨ Enhancing with AI...";
-  const res = await callGeminiDirectly(`Enhance and beautifully format these messy math notes into clean bullet points with bolded keywords and proper text notation. Return ONLY the enhanced notes, nothing else.\n\nNotes:\n${rawNote}`);
+  const res = await callGeminiDirectly(getEnhanceNotesPrompt(rawNote));
   if (res) {
     ntxt.value = res.trim();
     notes[tId] = ntxt.value;
