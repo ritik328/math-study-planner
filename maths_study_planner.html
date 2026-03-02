@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Maths1 · Study Planner</title>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Jost:wght@300;400;500;600&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="maths_style.css">
+</head>
+
+<body>
+
+  <!-- FOCUS BAR -->
+  <div class="fbar" id="fbar">
+    <div class="flbl">Focus Mode — <b id="ftitle">Topic</b></div>
+    <button class="fxit" onclick="exitFocus()">Exit Focus</button>
+  </div>
+
+  <!-- KBD PANEL -->
+  <div class="kpanel" id="kpanel" onclick="closeKbd(event)">
+    <div class="kbox">
+      <h3>Keyboard Shortcuts</h3>
+      <div class="kr"><span class="kdesc">Focus search</span><span class="kkey">/</span></div>
+      <div class="kr"><span class="kdesc">Expand all</span><span class="kkey">E</span></div>
+      <div class="kr"><span class="kdesc">Collapse all</span><span class="kkey">C</span></div>
+      <div class="kr"><span class="kdesc">Start / stop timer</span><span class="kkey">T</span></div>
+      <div class="kr"><span class="kdesc">Show pending only</span><span class="kkey">P</span></div>
+      <div class="kr"><span class="kdesc">Show all items</span><span class="kkey">A</span></div>
+      <div class="kr"><span class="kdesc">Toggle Dark Mode</span><span class="kkey">D</span></div>
+      <div class="kr"><span class="kdesc">This help panel</span><span class="kkey">?</span></div>
+      <div class="kr"><span class="kdesc">Close / exit</span><span class="kkey">Esc</span></div>
+      <button class="kclose" onclick="closeKbd()">Close</button>
+    </div>
+  </div>
+
+  <div class="page">
+
+    <!-- HEADER -->
+    <div class="hdr">
+      <div class="hdr-eye">Foundation Level · Semester 1 · Mathematics for Data Science I</div>
+      <div class="hdr-row">
+        <div>
+          <h1 class="hdr-title">Study <em>Planner</em></h1>
+          <p class="hdr-sub">All 9 topics · every subtopic · tick as you go</p>
+        </div>
+        <div class="hdr-right">
+          <div class="streak" id="examCountdown"
+            style="cursor:pointer; border-color:rgba(179,48,36,.25); color:var(--red); background:var(--red-l);"
+            onclick="setExamDate()">📅 Set Exam Date</div>
+          <div class="streak" id="streakBadge">🔥 <span id="streakN">0</span> day streak</div>
+          <div class="timer">
+            <div>
+              <div class="timer-lbl">Session</div>
+              <div class="timer-dig" id="tdig">00:00</div>
+            </div>
+            <button class="tbtn" id="tbtn" onclick="toggleTimer()">▶</button>
+            <button class="tbtn" onclick="resetTimer()" title="Reset">↺</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DONE BANNER -->
+    <div class="dbanner" id="dbanner">
+      <h2>All Topics Mastered</h2>
+      <p>Every subtopic is complete — you are exam ready.</p>
+    </div>
+
+    <!-- STATS -->
+    <div class="stats">
+      <div class="scard">
+        <div class="sval g" id="sDone">0</div>
+        <div class="slbl">Completed</div>
+      </div>
+      <div class="scard">
+        <div class="sval r" id="sLeft">0</div>
+        <div class="slbl">Remaining</div>
+      </div>
+      <div class="scard">
+        <div class="sval o" id="sPct">0%</div>
+        <div class="slbl">Progress</div>
+      </div>
+      <div class="scard">
+        <div class="sval" id="sTime">0m</div>
+        <div class="slbl">Study Time</div>
+      </div>
+    </div>
+
+    <!-- HEATMAP -->
+    <div class="prog" style="margin-bottom: 20px;">
+      <div class="prow" style="margin-bottom:12px;">
+        <div class="plbl">Activity Heatmap</div>
+      </div>
+      <div class="heatmap-container" id="heatmapContainer"
+        style="display:flex; gap:3px; flex-wrap:wrap; margin-top:10px;"></div>
+    </div>
+
+    <!-- PROGRESS -->
+    <div class="prog">
+      <div class="prow">
+        <div class="plbl">Overall Progress</div>
+        <div class="pnums"><span id="pDn">0</span> / <span id="pTl">0</span> subtopics</div>
+      </div>
+      <div class="track">
+        <div class="fill" id="pfill"></div>
+      </div>
+      <div class="chips" id="chiprow"></div>
+    </div>
+
+    <!-- TOOLBAR -->
+    <div class="bar">
+      <button class="btn btn-g" onclick="expandAll()">Expand All</button>
+      <button class="btn" onclick="collapseAll()">Collapse All</button>
+      <div class="dvdr"></div>
+      <button class="btn" onclick="fpending()">Pending Only</button>
+      <button class="btn" onclick="fall()">Show All</button>
+      <div class="dvdr"></div>
+      <button class="btn btn-o" onclick="doExport()">Export ↓</button>
+      <button class="btn btn-g" onclick="backupData()">Backup Data ↓</button>
+      <button class="btn" onclick="restoreData()">Restore Data ↑</button>
+      <button class="btn" onclick="openKbd()">Shortcuts ?</button>
+      <button class="btn btn-g" onclick="openChat()">🤖 AI Tutor</button>
+      <button class="btn" id="dmBtn" onclick="toggleDarkMode()">🌒 Dark Mode</button>
+      <button class="btn btn-r" onclick="resetAll()">Reset</button>
+    </div>
+
+    <!-- SEARCH -->
+    <div class="srch">
+      <span class="sico">⌕</span>
+      <input class="sinput" id="sinput" type="text" placeholder="Search any topic or subtopic..."
+        oninput="doSearch(this.value)">
+      <span class="khint">/ to focus</span>
+    </div>
+
+    <!-- TOPICS -->
+    <div id="twrap"></div>
+
+  </div>
+
+  <!-- TOAST -->
+  <div class="toast" id="toast">
+    <div class="tdot" id="tdot"></div><span id="tmsg">Done</span>
+  </div>
+
+  <!-- AI CHAT PANEL -->
+  <div class="kpanel" id="chatPanel" onclick="closeChatEvt(event)">
+    <div class="kbox chat-box">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px;">
+        <h3>🤖 AI Tutor</h3>
+        <button class="fxit" onclick="closeChat()">Close</button>
+      </div>
+      <div id="chatArea" style="display:none; flex-direction:column; gap:10px;">
+        <div class="chat-msgs" id="chatMsgs">
+          <div class="chat-msg ai">Hello! I am your Math Jarvis. Ask me to explain a concept from your planner.</div>
+        </div>
+        <div style="display:flex; gap:6px;">
+          <input type="text" id="chatInput" class="sinput" style="padding:8px 12px; font-size:12px;"
+            placeholder="Ask your question..." onkeydown="if(event.key==='Enter') sendToGemini()">
+          <button class="btn btn-g" id="chatSendBtn" onclick="sendToGemini()">Send</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="maths_script.js"></script>
+</body>
+
+</html>
